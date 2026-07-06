@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPA and CGPA Calculator</title>
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--accent:#38bdf8;--accent2:#22c55e;--danger:#ef4444;--border:#243042;--chip:#1f2937}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:linear-gradient(180deg,#020617,#0f172a 35%,#111827);color:var(--text)}
+    .wrap{max-width:1200px;margin:0 auto;padding:24px} h1{margin:0 0 8px;font-size:32px} p{color:var(--muted);margin:0 0 18px;line-height:1.5}
+    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px} .card{background:rgba(17,24,39,.9);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:0 18px 40px rgba(0,0,0,.25)}
+    .row{display:grid;grid-template-columns:2fr .8fr .8fr .45fr;gap:10px;align-items:end;margin-bottom:10px} .row.whatif{grid-template-columns:2fr .8fr .8fr .8fr .45fr}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px} input,select,button{width:100%;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);padding:12px 12px;font-size:14px}
+    input::placeholder{color:#64748b} button{cursor:pointer;font-weight:700} .btn{background:linear-gradient(135deg,var(--accent),#60a5fa);border:none;color:#02111f} .btn2{background:#182235} .btn3{background:#1f2937} .danger{background:linear-gradient(135deg,#ef4444,#f97316);border:none} .small{padding:10px 12px;border-radius:10px}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 6px} .toolbar button{width:auto} .muted{color:var(--muted)} .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+    .stat{background:var(--chip);border:1px solid var(--border);border-radius:16px;padding:14px} .stat .k{font-size:12px;color:var(--muted);margin-bottom:6px} .stat .v{font-size:28px;font-weight:800}
+    table{width:100%;border-collapse:collapse;margin-top:10px} th,td{padding:10px 8px;border-bottom:1px solid #223046;text-align:left;font-size:14px} th{color:#a5b4fc;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+    .tag{display:inline-block;padding:5px 10px;border-radius:999px;background:#0b1220;border:1px solid var(--border);color:#cbd5e1;font-size:12px;margin-right:8px;margin-bottom:8px}
+    .chartbox{margin-top:14px;background:#0b1220;border:1px solid var(--border);border-radius:16px;padding:14px} .barwrap{display:grid;gap:10px;margin-top:10px}
+    .barrow{display:grid;grid-template-columns:90px 1fr 70px;gap:10px;align-items:center} .bar{height:12px;background:#1e293b;border-radius:999px;overflow:hidden} .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%}
+    .sectionhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px} .note{font-size:12px;color:var(--muted)} .footer{margin-top:18px;font-size:12px;color:#94a3b8}
+    @media (max-width: 980px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)} .row,.row.whatif{grid-template-columns:1.4fr .8fr .8fr .45fr}}
+    @media (max-width: 640px){.stats{grid-template-columns:1fr} .row,.row.whatif{grid-template-columns:1fr 1fr;gap:8px}.row > div:nth-child(4),.row.whatif > div:nth-child(5){grid-column:span 2}.barrow{grid-template-columns:70px 1fr 60px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>GPA and CGPA Calculator</h1>
+    <p>Add subjects with credits and grades to calculate semester GPA and running CGPA. Use <b>What if mode</b> to simulate future semesters and see the CGPA you could reach by graduation.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="sectionhead"><div><b>Current Semester</b><div class="note">Enter the subjects you are taking right now</div></div><button class="small btn3" id="addCurrent">+ Add subject</button></div>
+        <div id="currentRows"></div>
+        <div class="toolbar"><button class="btn" id="calcCurrent">Calculate GPA</button><button class="btn2" id="resetAll">Reset All</button></div>
+        <div class="stats">
+          <div class="stat"><div class="k">Semester GPA</div><div class="v" id="semesterGpa">0.00</div></div>
+          <div class="stat"><div class="k">Current Credits</div><div class="v" id="currentCredits">0</div></div>
+          <div class="stat"><div class="k">Running CGPA</div><div class="v" id="cgpa">0.00</div></div>
+          <div class="stat"><div class="k">Total Credits</div><div class="v" id="totalCredits">0</div></div>
+        </div>
+        <div class="chartbox"><div class="sectionhead"><b>Grade Mix</b><span class="note">Based on current semester entries</span></div><div id="gradeChart" class="barwrap"></div></div>
+      </div>
+      <div class="card">
+        <div class="sectionhead"><div><b>What if mode</b><div class="note">Simulate future semesters and target a graduation CGPA</div></div><button class="small btn3" id="addFuture">+ Add future subject</button></div>
+        <div class="tag">Default scale used: A=4, B=3, C=2, D=1, F=0</div>
+        <div class="tag">You can edit the scale in the code if your school uses a different one</div>
+        <div id="futureRows"></div>
+        <div class="toolbar"><button class="btn" id="calcWhatIf">Simulate Graduation CGPA</button></div>
+        <div class="stats">
+          <div class="stat"><div class="k">Future GPA</div><div class="v" id="futureGpa">0.00</div></div>
+          <div class="stat"><div class="k">Projected CGPA</div><div class="v" id="projectedCgpa">0.00</div></div>
+          <div class="stat"><div class="k">Remaining Credits</div><div class="v" id="remainingCredits">0</div></div>
+          <div class="stat"><div class="k">Target Help</div><div class="v" id="targetHelp">-</div></div>
+        </div>
+        <div class="chartbox"><div class="sectionhead"><b>What if outcome</b><span class="note">Shows the projected CGPA if you earn the grades selected below</span></div><div id="projectionBars" class="barwrap"></div></div>
+      </div>
+    </div>
+    <div class="footer">Tip: add one row per subject. Semester GPA is based on the current semester rows. Running CGPA combines previous credits and grades with the current semester result.</div>
+  </div>
+  <script>
+    const gradePoints = {A:4,B:3,C:2,D:1,F:0};
+    let previousCgpa = 0; let previousCredits = 0;
+    const currentRows = document.getElementById('currentRows');
+    const futureRows = document.getElementById('futureRows');
+    const gradeOptions = ['A','B','C','D','F'];
+    function rowHtml(type, idx){
+      const isFuture = type === 'future';
+      let gradeSelect = '<select class="grade">';
+      gradeOptions.forEach(g => gradeSelect += '<option value="' + g + '">' + g + '</option>');
+      gradeSelect += '</select>';
+      return '<div class="row' + (isFuture ? ' whatif' : '') + '" data-row="' + type + '">' +
+        '<div><label>Subject</label><input class="subject" placeholder="' + (isFuture ? 'Future subject' : 'Subject name') + '" /></div>' +
+        '<div><label>Credits</label><input class="credits" type="number" min="0" step="0.5" placeholder="3" /></div>' +
+        '<div><label>Grade</label>' + gradeSelect + '</div>' +
+        (isFuture ? '<div><label>Notes</label><input class="notes" placeholder="Optional" /></div>' : '') +
+        '<div><label>&nbsp;</label><button class="danger small removeBtn">x</button></div>' +
+      '</div>';
+    }
+    function addRow(container, type){ const div = document.createElement('div'); div.innerHTML = rowHtml(type, 0); container.appendChild(div.firstChild); bindRemove(); }
+    function bindRemove(){ document.querySelectorAll('.removeBtn').forEach(btn => btn.onclick = e => e.target.closest('.row').remove()); }
+    function getRows(type){ return Array.from(document.querySelectorAll('[data-row="' + type + '"]')); }
+    function computeGpa(rows){ let totalPts = 0, totalCr = 0, counts = {A:0,B:0,C:0,D:0,F:0};
+      rows.forEach(r => { const cr = parseFloat(r.querySelector('.credits').value); const grade = r.querySelector('.grade').value; if (!isNaN(cr) && cr > 0){ totalPts += cr * gradePoints[grade]; totalCr += cr; counts[grade]++; }});
+      return {gpa: totalCr ? totalPts / totalCr : 0, credits: totalCr, counts: counts};
+    }
+    function renderGradeChart(counts){ const box = document.getElementById('gradeChart'); box.innerHTML = ''; const total = Object.values(counts).reduce((a,b)=>a+b,0) || 1;
+      gradeOptions.forEach(g => { const pct = Math.round((counts[g] / total) * 100); const row = document.createElement('div'); row.className='barrow'; row.innerHTML = '<div>' + g + '</div><div class="bar"><div class="fill" style="width:' + pct + '%"></div></div><div>' + pct + '%</div>'; box.appendChild(row); });
+    }
+    function renderProjection(projected){ const box = document.getElementById('projectionBars'); box.innerHTML = '';
+      const items = [['Current CGPA', previousCgpa], ['Projected CGPA', projected], ['Perfect Finish', 4.0]]; items.forEach(item => { const pct = Math.min(100, Math.round((item[1] / 4) * 100)); const row = document.createElement('div'); row.className='barrow'; row.innerHTML = '<div>' + item[0] + '</div><div class="bar"><div class="fill" style="width:' + pct + '%"></div></div><div>' + item[1].toFixed(2) + '</div>'; box.appendChild(row); }); }
+    document.getElementById('addCurrent').onclick = () => addRow(currentRows, 'current');
+    document.getElementById('addFuture').onclick = () => addRow(futureRows, 'future');
+    document.getElementById('resetAll').onclick = () => { currentRows.innerHTML = ''; futureRows.innerHTML = ''; previousCgpa = 0; previousCredits = 0; document.getElementById('semesterGpa').textContent='0.00'; document.getElementById('cgpa').textContent='0.00'; document.getElementById('currentCredits').textContent='0'; document.getElementById('totalCredits').textContent='0'; document.getElementById('futureGpa').textContent='0.00'; document.getElementById('projectedCgpa').textContent='0.00'; document.getElementById('remainingCredits').textContent='0'; document.getElementById('targetHelp').textContent='-'; renderGradeChart({A:0,B:0,C:0,D:0,F:0}); renderProjection(0); };
+    document.getElementById('calcCurrent').onclick = () => { const res = computeGpa(getRows('current')); const cgpa = (previousCgpa * previousCredits + res.gpa * res.credits) / ((previousCredits + res.credits) || 1); document.getElementById('semesterGpa').textContent = res.gpa.toFixed(2); document.getElementById('cgpa').textContent = cgpa.toFixed(2); document.getElementById('currentCredits').textContent = res.credits.toFixed(1).replace('.0',''); document.getElementById('totalCredits').textContent = (previousCredits + res.credits).toFixed(1).replace('.0',''); renderGradeChart(res.counts); renderProjection(cgpa); };
+    document.getElementById('calcWhatIf').onclick = () => { const currentRes = computeGpa(getRows('current')); const futureRes = computeGpa(getRows('future')); const totalCr = previousCredits + currentRes.credits + futureRes.credits; const projected = ((previousCgpa * previousCredits) + (currentRes.gpa * currentRes.credits) + (futureRes.gpa * futureRes.credits)) / (totalCr || 1); document.getElementById('futureGpa').textContent = futureRes.gpa.toFixed(2); document.getElementById('projectedCgpa').textContent = projected.toFixed(2); document.getElementById('remainingCredits').textContent = futureRes.credits.toFixed(1).replace('.0',''); document.getElementById('targetHelp').textContent = projected >= 3.5 ? 'Strong' : projected >= 3.0 ? 'Good' : 'Needs work'; renderProjection(projected); };
+    for (let i=0; i<3; i++) addRow(currentRows, 'current');
+    for (let i=0; i<2; i++) addRow(futureRows, 'future');
+    renderGradeChart({A:0,B:0,C:0,D:0,F:0}); renderProjection(0);
+  </script>
+</body>
+</html>
