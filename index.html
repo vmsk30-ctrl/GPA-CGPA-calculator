@@ -19,14 +19,29 @@
     .chartbox{margin-top:14px;background:#0b1220;border:1px solid var(--border);border-radius:16px;padding:14px} .barwrap{display:grid;gap:10px;margin-top:10px}
     .barrow{display:grid;grid-template-columns:90px 1fr 70px;gap:10px;align-items:center} .bar{height:12px;background:#1e293b;border-radius:999px;overflow:hidden} .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%}
     .sectionhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px} .note{font-size:12px;color:var(--muted)} .footer{margin-top:18px;font-size:12px;color:#94a3b8}
+    .prevgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
     @media (max-width: 980px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)} .row,.row.whatif{grid-template-columns:1.4fr .8fr .8fr .45fr}}
-    @media (max-width: 640px){.stats{grid-template-columns:1fr} .row,.row.whatif{grid-template-columns:1fr 1fr;gap:8px}.row > div:nth-child(4),.row.whatif > div:nth-child(5){grid-column:span 2}.barrow{grid-template-columns:70px 1fr 60px}}
+    @media (max-width: 640px){.stats{grid-template-columns:1fr} .row,.row.whatif{grid-template-columns:1fr 1fr;gap:8px}.row > div:nth-child(4),.row.whatif > div:nth-child(5){grid-column:span 2}.barrow{grid-template-columns:70px 1fr 60px}.prevgrid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>GPA and CGPA Calculator</h1>
-    <p>Add subjects with credits and grades to calculate semester GPA and running CGPA. Use <b>What if mode</b> to simulate future semesters and see the CGPA you could reach by graduation.</p>
+    <p>Add subjects with credits and grades to calculate semester GPA and running CGPA using the Indian 10-point grading system. Use <b>What if mode</b> to simulate future semesters and see the CGPA you could reach by graduation. Your data is saved automatically in this browser.</p>
+
+    <div class="card" style="margin-bottom:18px">
+      <div class="sectionhead"><div><b>Previous Academic Record</b><div class="note">Enter your CGPA and credits earned so far (before this semester)</div></div></div>
+      <div class="prevgrid">
+        <div><label>Previous CGPA (out of 10)</label><input id="prevCgpaInput" type="number" min="0" max="10" step="0.01" placeholder="e.g. 8.20" /></div>
+        <div><label>Previous Total Credits</label><input id="prevCreditsInput" type="number" min="0" step="0.5" placeholder="e.g. 60" /></div>
+      </div>
+      <div class="toolbar">
+        <button class="small btn3" id="exportCsv">Export CSV</button>
+        <button class="small btn3" id="exportPdf">Export PDF</button>
+        <button class="small btn2" id="clearStorage">Clear Saved Data</button>
+      </div>
+    </div>
+
     <div class="grid">
       <div class="card">
         <div class="sectionhead"><div><b>Current Semester</b><div class="note">Enter the subjects you are taking right now</div></div><button class="small btn3" id="addCurrent">+ Add subject</button></div>
@@ -42,8 +57,7 @@
       </div>
       <div class="card">
         <div class="sectionhead"><div><b>What if mode</b><div class="note">Simulate future semesters and target a graduation CGPA</div></div><button class="small btn3" id="addFuture">+ Add future subject</button></div>
-        <div class="tag">Default scale used: A=4, B=3, C=2, D=1, F=0</div>
-        <div class="tag">You can edit the scale in the code if your school uses a different one</div>
+        <div class="tag">Indian 10-point scale: O=10, A+=9, A=8, B+=7, B=6, C=5, P=4, F=0</div>
         <div id="futureRows"></div>
         <div class="toolbar"><button class="btn" id="calcWhatIf">Simulate Graduation CGPA</button></div>
         <div class="stats">
@@ -55,15 +69,20 @@
         <div class="chartbox"><div class="sectionhead"><b>What if outcome</b><span class="note">Shows the projected CGPA if you earn the grades selected below</span></div><div id="projectionBars" class="barwrap"></div></div>
       </div>
     </div>
-    <div class="footer">Tip: add one row per subject. Semester GPA is based on the current semester rows. Running CGPA combines previous credits and grades with the current semester result.</div>
+    <div class="footer">Tip: add one row per subject. Semester GPA is based on the current semester rows. Running CGPA combines previous credits and grades with the current semester result. Scale is out of 10 (Indian grading system).</div>
   </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
-    const gradePoints = {A:4,B:3,C:2,D:1,F:0};
-    let previousCgpa = 0; let previousCredits = 0;
+    const gradePoints = {O:10,'A+':9,A:8,'B+':7,B:6,C:5,P:4,F:0};
+    const gradeOptions = ['O','A+','A','B+','B','C','P','F'];
+    const STORAGE_KEY = 'gpaCalcData_v1';
+
     const currentRows = document.getElementById('currentRows');
     const futureRows = document.getElementById('futureRows');
-    const gradeOptions = ['A','B','C','D','F'];
-    function rowHtml(type, idx){
+    const prevCgpaInput = document.getElementById('prevCgpaInput');
+    const prevCreditsInput = document.getElementById('prevCreditsInput');
+
+    function rowHtml(type){
       const isFuture = type === 'future';
       let gradeSelect = '<select class="grade">';
       gradeOptions.forEach(g => gradeSelect += '<option value="' + g + '">' + g + '</option>');
@@ -76,26 +95,145 @@
         '<div><label>&nbsp;</label><button class="danger small removeBtn">x</button></div>' +
       '</div>';
     }
-    function addRow(container, type){ const div = document.createElement('div'); div.innerHTML = rowHtml(type, 0); container.appendChild(div.firstChild); bindRemove(); }
-    function bindRemove(){ document.querySelectorAll('.removeBtn').forEach(btn => btn.onclick = e => e.target.closest('.row').remove()); }
+    function addRow(container, type, data){
+      const div = document.createElement('div'); div.innerHTML = rowHtml(type); const el = div.firstChild; container.appendChild(el);
+      if (data){
+        el.querySelector('.subject').value = data.subject || '';
+        el.querySelector('.credits').value = data.credits ?? '';
+        el.querySelector('.grade').value = data.grade || 'O';
+        if (type === 'future' && el.querySelector('.notes')) el.querySelector('.notes').value = data.notes || '';
+      }
+      bindRemove(); bindPersist();
+    }
+    function bindRemove(){ document.querySelectorAll('.removeBtn').forEach(btn => btn.onclick = e => { e.target.closest('.row').remove(); saveState(); }); }
+    function bindPersist(){ document.querySelectorAll('#currentRows input, #currentRows select, #futureRows input, #futureRows select').forEach(el => { el.oninput = saveState; el.onchange = saveState; }); }
     function getRows(type){ return Array.from(document.querySelectorAll('[data-row="' + type + '"]')); }
-    function computeGpa(rows){ let totalPts = 0, totalCr = 0, counts = {A:0,B:0,C:0,D:0,F:0};
+
+    function computeGpa(rows){
+      let totalPts = 0, totalCr = 0, counts = {O:0,'A+':0,A:0,'B+':0,B:0,C:0,P:0,F:0};
       rows.forEach(r => { const cr = parseFloat(r.querySelector('.credits').value); const grade = r.querySelector('.grade').value; if (!isNaN(cr) && cr > 0){ totalPts += cr * gradePoints[grade]; totalCr += cr; counts[grade]++; }});
       return {gpa: totalCr ? totalPts / totalCr : 0, credits: totalCr, counts: counts};
     }
-    function renderGradeChart(counts){ const box = document.getElementById('gradeChart'); box.innerHTML = ''; const total = Object.values(counts).reduce((a,b)=>a+b,0) || 1;
+
+    function renderGradeChart(counts){
+      const box = document.getElementById('gradeChart'); box.innerHTML = ''; const total = Object.values(counts).reduce((a,b)=>a+b,0) || 1;
       gradeOptions.forEach(g => { const pct = Math.round((counts[g] / total) * 100); const row = document.createElement('div'); row.className='barrow'; row.innerHTML = '<div>' + g + '</div><div class="bar"><div class="fill" style="width:' + pct + '%"></div></div><div>' + pct + '%</div>'; box.appendChild(row); });
     }
-    function renderProjection(projected){ const box = document.getElementById('projectionBars'); box.innerHTML = '';
-      const items = [['Current CGPA', previousCgpa], ['Projected CGPA', projected], ['Perfect Finish', 4.0]]; items.forEach(item => { const pct = Math.min(100, Math.round((item[1] / 4) * 100)); const row = document.createElement('div'); row.className='barrow'; row.innerHTML = '<div>' + item[0] + '</div><div class="bar"><div class="fill" style="width:' + pct + '%"></div></div><div>' + item[1].toFixed(2) + '</div>'; box.appendChild(row); }); }
-    document.getElementById('addCurrent').onclick = () => addRow(currentRows, 'current');
-    document.getElementById('addFuture').onclick = () => addRow(futureRows, 'future');
-    document.getElementById('resetAll').onclick = () => { currentRows.innerHTML = ''; futureRows.innerHTML = ''; previousCgpa = 0; previousCredits = 0; document.getElementById('semesterGpa').textContent='0.00'; document.getElementById('cgpa').textContent='0.00'; document.getElementById('currentCredits').textContent='0'; document.getElementById('totalCredits').textContent='0'; document.getElementById('futureGpa').textContent='0.00'; document.getElementById('projectedCgpa').textContent='0.00'; document.getElementById('remainingCredits').textContent='0'; document.getElementById('targetHelp').textContent='-'; renderGradeChart({A:0,B:0,C:0,D:0,F:0}); renderProjection(0); };
-    document.getElementById('calcCurrent').onclick = () => { const res = computeGpa(getRows('current')); const cgpa = (previousCgpa * previousCredits + res.gpa * res.credits) / ((previousCredits + res.credits) || 1); document.getElementById('semesterGpa').textContent = res.gpa.toFixed(2); document.getElementById('cgpa').textContent = cgpa.toFixed(2); document.getElementById('currentCredits').textContent = res.credits.toFixed(1).replace('.0',''); document.getElementById('totalCredits').textContent = (previousCredits + res.credits).toFixed(1).replace('.0',''); renderGradeChart(res.counts); renderProjection(cgpa); };
-    document.getElementById('calcWhatIf').onclick = () => { const currentRes = computeGpa(getRows('current')); const futureRes = computeGpa(getRows('future')); const totalCr = previousCredits + currentRes.credits + futureRes.credits; const projected = ((previousCgpa * previousCredits) + (currentRes.gpa * currentRes.credits) + (futureRes.gpa * futureRes.credits)) / (totalCr || 1); document.getElementById('futureGpa').textContent = futureRes.gpa.toFixed(2); document.getElementById('projectedCgpa').textContent = projected.toFixed(2); document.getElementById('remainingCredits').textContent = futureRes.credits.toFixed(1).replace('.0',''); document.getElementById('targetHelp').textContent = projected >= 3.5 ? 'Strong' : projected >= 3.0 ? 'Good' : 'Needs work'; renderProjection(projected); };
-    for (let i=0; i<3; i++) addRow(currentRows, 'current');
-    for (let i=0; i<2; i++) addRow(futureRows, 'future');
-    renderGradeChart({A:0,B:0,C:0,D:0,F:0}); renderProjection(0);
+    function renderProjection(projected){
+      const box = document.getElementById('projectionBars'); box.innerHTML = '';
+      const prevCgpa = parseFloat(prevCgpaInput.value) || 0;
+      const items = [['Current CGPA', prevCgpa], ['Projected CGPA', projected], ['Perfect Finish', 10.0]];
+      items.forEach(item => { const pct = Math.min(100, Math.round((item[1] / 10) * 100)); const row = document.createElement('div'); row.className='barrow'; row.innerHTML = '<div>' + item[0] + '</div><div class="bar"><div class="fill" style="width:' + pct + '%"></div></div><div>' + item[1].toFixed(2) + '</div>'; box.appendChild(row); });
+    }
+
+    function saveState(){
+      const state = {
+        prevCgpa: prevCgpaInput.value, prevCredits: prevCreditsInput.value,
+        current: getRows('current').map(r => ({ subject: r.querySelector('.subject').value, credits: r.querySelector('.credits').value, grade: r.querySelector('.grade').value })),
+        future: getRows('future').map(r => ({ subject: r.querySelector('.subject').value, credits: r.querySelector('.credits').value, grade: r.querySelector('.grade').value, notes: r.querySelector('.notes').value }))
+      };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+    }
+    function loadState(){
+      let state = null;
+      try { state = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e) {}
+      if (!state){
+        for (let i=0; i<3; i++) addRow(currentRows, 'current');
+        for (let i=0; i<2; i++) addRow(futureRows, 'future');
+        return;
+      }
+      prevCgpaInput.value = state.prevCgpa || '';
+      prevCreditsInput.value = state.prevCredits || '';
+      (state.current || []).forEach(d => addRow(currentRows, 'current', d));
+      (state.future || []).forEach(d => addRow(futureRows, 'future', d));
+      if (!getRows('current').length) addRow(currentRows, 'current');
+      if (!getRows('future').length) addRow(futureRows, 'future');
+    }
+
+    document.getElementById('addCurrent').onclick = () => { addRow(currentRows, 'current'); saveState(); };
+    document.getElementById('addFuture').onclick = () => { addRow(futureRows, 'future'); saveState(); };
+    prevCgpaInput.oninput = saveState; prevCreditsInput.oninput = saveState;
+
+    document.getElementById('resetAll').onclick = () => {
+      currentRows.innerHTML = ''; futureRows.innerHTML = ''; prevCgpaInput.value=''; prevCreditsInput.value='';
+      document.getElementById('semesterGpa').textContent='0.00'; document.getElementById('cgpa').textContent='0.00';
+      document.getElementById('currentCredits').textContent='0'; document.getElementById('totalCredits').textContent='0';
+      document.getElementById('futureGpa').textContent='0.00'; document.getElementById('projectedCgpa').textContent='0.00';
+      document.getElementById('remainingCredits').textContent='0'; document.getElementById('targetHelp').textContent='-';
+      renderGradeChart({O:0,'A+':0,A:0,'B+':0,B:0,C:0,P:0,F:0}); renderProjection(0);
+      addRow(currentRows, 'current'); addRow(futureRows, 'future'); saveState();
+    };
+    document.getElementById('clearStorage').onclick = () => { try { localStorage.removeItem(STORAGE_KEY); } catch(e){} location.reload(); };
+
+    document.getElementById('calcCurrent').onclick = () => {
+      const res = computeGpa(getRows('current'));
+      const previousCgpa = parseFloat(prevCgpaInput.value) || 0;
+      const previousCredits = parseFloat(prevCreditsInput.value) || 0;
+      const cgpa = (previousCgpa * previousCredits + res.gpa * res.credits) / ((previousCredits + res.credits) || 1);
+      document.getElementById('semesterGpa').textContent = res.gpa.toFixed(2);
+      document.getElementById('cgpa').textContent = cgpa.toFixed(2);
+      document.getElementById('currentCredits').textContent = res.credits.toFixed(1).replace('.0','');
+      document.getElementById('totalCredits').textContent = (previousCredits + res.credits).toFixed(1).replace('.0','');
+      renderGradeChart(res.counts); renderProjection(cgpa); saveState();
+    };
+
+    document.getElementById('calcWhatIf').onclick = () => {
+      const currentRes = computeGpa(getRows('current'));
+      const futureRes = computeGpa(getRows('future'));
+      const previousCgpa = parseFloat(prevCgpaInput.value) || 0;
+      const previousCredits = parseFloat(prevCreditsInput.value) || 0;
+      const totalCr = previousCredits + currentRes.credits + futureRes.credits;
+      const projected = ((previousCgpa * previousCredits) + (currentRes.gpa * currentRes.credits) + (futureRes.gpa * futureRes.credits)) / (totalCr || 1);
+      document.getElementById('futureGpa').textContent = futureRes.gpa.toFixed(2);
+      document.getElementById('projectedCgpa').textContent = projected.toFixed(2);
+      document.getElementById('remainingCredits').textContent = futureRes.credits.toFixed(1).replace('.0','');
+      document.getElementById('targetHelp').textContent = projected >= 8.5 ? 'Strong' : projected >= 7.0 ? 'Good' : 'Needs work';
+      renderProjection(projected); saveState();
+    };
+
+    document.getElementById('exportCsv').onclick = () => {
+      let rows = [['Section','Subject','Credits','Grade','Grade Point']];
+      getRows('current').forEach(r => { const g = r.querySelector('.grade').value; rows.push(['Current', r.querySelector('.subject').value || '', r.querySelector('.credits').value || '', g, gradePoints[g]]); });
+      getRows('future').forEach(r => { const g = r.querySelector('.grade').value; rows.push(['Future', r.querySelector('.subject').value || '', r.querySelector('.credits').value || '', g, gradePoints[g]]); });
+      rows.push([]); rows.push(['Previous CGPA', prevCgpaInput.value || '0']); rows.push(['Previous Credits', prevCreditsInput.value || '0']);
+      rows.push(['Semester GPA', document.getElementById('semesterGpa').textContent]);
+      rows.push(['Running CGPA', document.getElementById('cgpa').textContent]);
+      rows.push(['Projected CGPA', document.getElementById('projectedCgpa').textContent]);
+      const csv = rows.map(row => row.map(cell => '"' + String(cell).replace(/"/g,'""') + '"').join(',')).join('\n');
+      const blob = new Blob([csv], {type: 'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'gpa_report.csv'; a.click(); URL.revokeObjectURL(url);
+    };
+
+    document.getElementById('exportPdf').onclick = () => {
+      const { jsPDF } = window.jspdf; const doc = new jsPDF();
+      let y = 15;
+      doc.setFontSize(18); doc.text('GPA / CGPA Report', 14, y); y += 10;
+      doc.setFontSize(11);
+      doc.text('Previous CGPA: ' + (prevCgpaInput.value || '0') + '   Previous Credits: ' + (prevCreditsInput.value || '0'), 14, y); y += 8;
+      doc.text('Semester GPA: ' + document.getElementById('semesterGpa').textContent, 14, y); y += 6;
+      doc.text('Running CGPA: ' + document.getElementById('cgpa').textContent, 14, y); y += 6;
+      doc.text('Projected CGPA (What-If): ' + document.getElementById('projectedCgpa').textContent, 14, y); y += 10;
+
+      doc.setFontSize(13); doc.text('Current Semester Subjects', 14, y); y += 7;
+      doc.setFontSize(10);
+      getRows('current').forEach(r => {
+        const s = r.querySelector('.subject').value || '(unnamed)'; const c = r.querySelector('.credits').value || '0'; const g = r.querySelector('.grade').value;
+        doc.text(s + '  |  Credits: ' + c + '  |  Grade: ' + g + ' (' + gradePoints[g] + ')', 14, y); y += 6;
+        if (y > 270){ doc.addPage(); y = 15; }
+      });
+      y += 4; doc.setFontSize(13); doc.text('What-If Future Subjects', 14, y); y += 7;
+      doc.setFontSize(10);
+      getRows('future').forEach(r => {
+        const s = r.querySelector('.subject').value || '(unnamed)'; const c = r.querySelector('.credits').value || '0'; const g = r.querySelector('.grade').value;
+        doc.text(s + '  |  Credits: ' + c + '  |  Grade: ' + g + ' (' + gradePoints[g] + ')', 14, y); y += 6;
+        if (y > 270){ doc.addPage(); y = 15; }
+      });
+      doc.save('gpa_report.pdf');
+    };
+
+    loadState();
+    document.getElementById('calcCurrent').click();
   </script>
 </body>
 </html>
